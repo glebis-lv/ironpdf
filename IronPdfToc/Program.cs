@@ -81,7 +81,7 @@ of persons!
             var pdfDocument = htmlToPdfRenderer.RenderHtmlAsPdf(html);
             for (var a = 0; a < pdfDocument.Pages.Count; a++)
             {
-                pdfDocument.BookMarks.AddBookMarkAtStart($"{pdfDocumentName}'s bookmark of page ", a);
+                pdfDocument.BookMarks.AddBookMarkAtStart($"{pdfDocumentName}'s bookmark of page ", a, a);
             }
 
             return pdfDocument;
@@ -95,7 +95,7 @@ of persons!
             {
                 foreach (var bookMark in pdfDocument.BookMarks.BookMarkList.OrderBy(b => b.PageIndex))
                 {
-                    tocItems.Add(new TableOfContents { Title = bookMark.Text, PageNumber = bookMark.PageIndex + 1 + startPage });
+                    tocItems.Add(new TableOfContents { Title = bookMark.Text, PageNumber = bookMark.PageIndex + 1 + startPage, IndentLevel = bookMark.IndentLevel });
                 }
                 startPage += pdfDocument.PageCount;
             }
@@ -103,7 +103,7 @@ of persons!
             var html = default(string);
             foreach (var tocItem in tocItems)
             {
-                html += $"<p>{tocItem.Title}_________________{tocItem.PageNumber}</p>";
+                html += $"<h{tocItem.IndentLevel + 1}>{tocItem.Title} ... {tocItem.PageNumber}</h{tocItem.IndentLevel + 1}>";
             }
 
             return htmlToPdfRenderer.RenderHtmlAsPdf(html);
@@ -154,6 +154,7 @@ of persons!
         {
             public int PageNumber { get; set; }
             public string Title { get; set; }
+            public int IndentLevel { get; set; }
         }
     }
 }
