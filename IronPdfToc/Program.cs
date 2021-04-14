@@ -6,35 +6,54 @@ namespace IronPdfToc
 {
     internal class Program
     {
+        private static List<TitleDto> _titles = new List<TitleDto> {new TitleDto{ Title = "1st chapter main title", Indentation=  0 },
+            new TitleDto{ Title = "1st chapter 2nd level title", Indentation= 1 },
+            new TitleDto{ Title = "1st chapter 3rd level title", Indentation=2 },
+            new TitleDto{ Title = "2nd chapter main title", Indentation = 0 },
+            new TitleDto{ Title = "2nd chapter 2nd level title", Indentation=  1 },
+            new TitleDto{ Title = "2nd chapter 3rd level title" , Indentation= 2 } };
+
+        public class TitleDto
+        {
+            public string Title { get; set; }
+            public int Indentation { get; set; }
+        }
+
         private static readonly ChapterInfo Chapter1 = new ChapterInfo
         {
             Title = "Intro",
-            Content = @"
-<h1>Introduction</h1>
+            Content = @$"
+<h1>{_titles[0].Title}</h1>
 <div>This is the intro of the page</div>
 
-
+<div style='page-break-after: always;'>&nbsp;</div>
     <div style='page-break-after: always;'>&nbsp;</div>
 
-another intro page
+<h2>{_titles[1].Title}</h2>
 
-
+<div style='page-break-after: always;'>&nbsp;</div>
     <div style='page-break-after: always;'>&nbsp;</div>
 
-and another
+<h3>{_titles[2].Title}</h3>
+<div style='page-break-after: always;'>&nbsp;</div>
+<div style='page-break-after: always;'>&nbsp;</div>
 "
         };
 
         private static readonly ChapterInfo Chapter2 = new ChapterInfo
         {
             Title = "Person list",
-            Content = @"
-<h1>All of the persons</h1>
+            Content = @$"
+<h1>{_titles[3].Title}</h1>
 <div>A lot of persons over here...</div>
 <div style='page-break-after: always;'>&nbsp;</div>
-really a lot
 <div style='page-break-after: always;'>&nbsp;</div>
-of persons!
+<h2>{_titles[4].Title}</h2>
+<div style='page-break-after: always;'>&nbsp;</div>
+<div style='page-break-after: always;'>&nbsp;</div>
+<div style='page-break-after: always;'>&nbsp;</div>
+<h3>{_titles[5].Title}</h3>
+<div style='page-break-after: always;'>&nbsp;</div>
 "
         };
 
@@ -71,6 +90,11 @@ of persons!
             mergedDocument.SaveAs("HtmlToPDF.pdf");
         }
 
+        private static List<TitleDto> FindTitles(string pageAllText)
+        {
+            return _titles.Where(t => pageAllText.Contains(t.Title)).ToList();
+        }
+
         private static PdfDocument CreatePdfDocument(HtmlToPdf htmlToPdfRenderer,
             string pdfDocumentName,
             string html,
@@ -79,9 +103,15 @@ of persons!
             htmlToPdfRenderer.PrintOptions.FirstPageNumber = startingPage;
 
             var pdfDocument = htmlToPdfRenderer.RenderHtmlAsPdf(html);
+
             for (var a = 0; a < pdfDocument.Pages.Count; a++)
             {
-                pdfDocument.BookMarks.AddBookMarkAtStart($"{pdfDocumentName}'s bookmark of page ", a, a);
+                var pageText = pdfDocument.ExtractTextFromPage(a);
+                var titles = FindTitles(pageText).OrderBy(t => t.Indentation);
+                foreach (var title in titles)
+                {
+                    pdfDocument.BookMarks.AddBookMarkAtStart(title.Title, a, title.Indentation);
+                }
             }
 
             return pdfDocument;
