@@ -1,5 +1,7 @@
 ﻿using System.Collections.Generic;
 using System.Linq;
+using System.Text.RegularExpressions;
+using HtmlAgilityPack;
 using IronPdf;
 
 namespace IronPdfToc
@@ -23,38 +25,36 @@ namespace IronPdfToc
         {
             Title = "Intro",
             Content = @$"
-<h1>{_titles[0].Title}</h1>
-<div>This is the intro of the page</div>
+                <h1>{_titles[0].Title}</h1>
+                <div>This is the intro of the page</div>
 
-<div style='page-break-after: always;'>&nbsp;</div>
-    <div style='page-break-after: always;'>&nbsp;</div>
+                <div style='page-break-after: always;'>&nbsp;</div>
+                    <div style='page-break-after: always;'>&nbsp;</div>
 
-<h2>{_titles[1].Title}</h2>
+                <h2>{_titles[1].Title}</h2>
 
-<div style='page-break-after: always;'>&nbsp;</div>
-    <div style='page-break-after: always;'>&nbsp;</div>
+                <div style='page-break-after: always;'>&nbsp;</div>
+                    <div style='page-break-after: always;'>&nbsp;</div>
 
-<h3>{_titles[2].Title}</h3>
-<div style='page-break-after: always;'>&nbsp;</div>
-<div style='page-break-after: always;'>&nbsp;</div>
-"
+                <h3>{_titles[2].Title}</h3>
+                <div style='page-break-after: always;'>&nbsp;</div>
+                <div style='page-break-after: always;'>&nbsp;</div>"
         };
 
         private static readonly ChapterInfo Chapter2 = new ChapterInfo
         {
             Title = "Person list",
             Content = @$"
-<h1>{_titles[3].Title}</h1>
-<div>A lot of persons over here...</div>
-<div style='page-break-after: always;'>&nbsp;</div>
-<div style='page-break-after: always;'>&nbsp;</div>
-<h2>{_titles[4].Title}</h2>
-<div style='page-break-after: always;'>&nbsp;</div>
-<div style='page-break-after: always;'>&nbsp;</div>
-<div style='page-break-after: always;'>&nbsp;</div>
-<h3>{_titles[5].Title}</h3>
-<div style='page-break-after: always;'>&nbsp;</div>
-"
+                <h1>{_titles[3].Title}</h1>
+                <div>A lot of persons over here...</div>
+                <div style='page-break-after: always;'>&nbsp;</div>
+                <div style='page-break-after: always;'>&nbsp;</div>
+                <h2>{_titles[4].Title}</h2>
+                <div style='page-break-after: always;'>&nbsp;</div>
+                <div style='page-break-after: always;'>&nbsp;</div>
+                <div style='page-break-after: always;'>&nbsp;</div>
+                <h3>{_titles[5].Title}</h3>
+                <div style='page-break-after: always;'>&nbsp;</div>"
         };
 
         private static void Main()
@@ -78,7 +78,8 @@ namespace IronPdfToc
 
             foreach (var chapterInfo in chapterInfos)
             {
-                var startPage = pdfDocuments.Sum(d => d.PageCount) + 1;
+                var startPage = pdfDocuments.Sum(d => d.PageCount)
+                    + GetTableOfContentsPagesCount(HtmlHelper.GetHtmlNodesListFromMarkup(chapterInfo.Content), CreateTocRenderer());
                 var pdfDocument = CreatePdfDocument(htmlToPdfRenderer, chapterInfo.Title, chapterInfo.Content, startPage);
                 pdfDocuments.Add(pdfDocument);
             }
@@ -95,6 +96,54 @@ namespace IronPdfToc
             return _titles.Where(t => pageAllText.Contains(t.Title)).ToList();
         }
 
+        private static List<TitleDto> FindTitles(List<HtmlNode> htmlNodes)
+        {
+            return htmlNodes.Where(node => HtmlHelper.HTML_HEADERS.Contains(node.Name))
+                .Select(node => new TitleDto { Title = node.InnerText, Indentation = GetHeaderIndentation(node.Name) })
+                .ToList();
+        }
+
+        private static int GetTableOfContentsPagesCount(List<HtmlNode> htmlNodes, HtmlToPdf htmlToPdfRenderer)
+        {
+            var titles = FindTitles(htmlNodes);
+            var html = default(string);
+            foreach (var tocItem in titles)
+            {
+                html += $"<h{tocItem.Indentation + 1}>{tocItem.Title} ... {0}</h{tocItem.Indentation + 1}>";
+            }
+
+            return htmlToPdfRenderer.RenderHtmlAsPdf(html).PageCount;
+        }
+
+        private static int GetHeaderIndentation(string headerName)
+        {
+            Regex regex = new Regex(@"^h([1-6]{1})$");
+            Match match = regex.Match(headerName);
+
+            if (match.Success)
+                return int.Parse(match.Groups[1].Value);
+
+            return 0;
+        }
+
+
+        private static List<HtmlNode> FindPageNodes(string pageText, List<HtmlNode> htmlNodes)
+        {
+            var pageNodes = new List<HtmlNode>();
+            foreach (var htmlNode in htmlNodes)
+            {
+                if (pageText.StartsWith(htmlNode.InnerHtml))
+                {
+                    pageNodes.Add(htmlNode);
+                    pageText = pageText.Substring(htmlNode.InnerHtml.Length);
+                }
+                else
+                    break;
+            }
+
+            return pageNodes;
+        }
+
         private static PdfDocument CreatePdfDocument(HtmlToPdf htmlToPdfRenderer,
             string pdfDocumentName,
             string html,
@@ -103,11 +152,18 @@ namespace IronPdfToc
             htmlToPdfRenderer.PrintOptions.FirstPageNumber = startingPage;
 
             var pdfDocument = htmlToPdfRenderer.RenderHtmlAsPdf(html);
-
+            var htmlNodes = HtmlHelper.GetHtmlNodesListFromMarkup(html);
+            htmlNodes = htmlNodes.Where(node => node.InnerText != "&nbsp;").ToList();
             for (var a = 0; a < pdfDocument.Pages.Count; a++)
             {
                 var pageText = pdfDocument.ExtractTextFromPage(a);
-                var titles = FindTitles(pageText).OrderBy(t => t.Indentation);
+                var pageHtmlNodes = FindPageNodes(pageText, htmlNodes);
+                if (!pageHtmlNodes.Any())
+                    continue;
+
+                htmlNodes = htmlNodes.GetRange(pageHtmlNodes.Count, htmlNodes.Count - pageHtmlNodes.Count);
+                var titles = FindTitles(pageHtmlNodes);
+
                 foreach (var title in titles)
                 {
                     pdfDocument.BookMarks.AddBookMarkAtStart(title.Title, a, title.Indentation);
